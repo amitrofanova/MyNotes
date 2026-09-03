@@ -1,0 +1,38 @@
+---
+description: Constraints and conventions for MyNotes (TZ + architecture)
+alwaysApply: true
+---
+
+# MyNotes
+
+Follow `docs/architecture.md`. Stay inside the current task scope. Do not add features, pages, libraries, or refactors the user did not ask for.
+
+## Forbidden
+
+- UI kits: Vuetify, PrimeVue, Element, Nuxt UI, and similar
+- undo/redo libraries
+- persist plugins (`pinia-plugin-persistedstate` and similar)
+- `window.alert` / `window.confirm` — confirmations are custom modals
+- storing 50 full note snapshots for history
+
+## History
+
+- Patch/command stack, max 50 entries, oldest dropped
+- Text in one field coalesces to a single entry (commit on blur or ~400ms pause)
+- Checkbox, add, delete are atomic entries
+- A new change after undo clears the redo branch
+- History lives in the editor session; save and cancel call `clear()`
+
+## Hotkeys
+
+Ctrl+Z / Shift+Ctrl+Z on the edit page. If focus is in an input/textarea and the current field has uncommitted typing, do not intercept (native undo). Otherwise `preventDefault` and use app history.
+
+## Product
+
+- UI copy is Russian; code, files, and commits are English
+- TypeScript strict, Composition API, SCSS, Pinia without persist plugins
+- Reusable UI goes into `app/components/ui`
+
+## Git
+
+Commit only when asked. Conventional commits, one concern per commit. No WIP messages.
