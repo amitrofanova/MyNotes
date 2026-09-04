@@ -148,4 +148,35 @@ describe('notes store', () => {
 
     expect(readPersisted()?.schemaVersion).toBe(1)
   })
+
+  it('syncFromStorage replaces memory from storage and does not write', () => {
+    const store = useNotesStore()
+    store.create({ id: 'n1', title: 'Local' })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      notes: [{ id: 'n2', title: 'Remote', todos: [] }],
+    }))
+    const setItem = vi.spyOn(localStorage, 'setItem')
+
+    store.syncFromStorage()
+
+    expect(store.list).toEqual([{ id: 'n2', title: 'Remote', todos: [] }])
+    expect(setItem).not.toHaveBeenCalled()
+  })
+
+  it('syncFromStorage drops a pending persist so a later flush does not overwrite storage', () => {
+    vi.useFakeTimers()
+    const store = useNotesStore()
+    store.create({ id: 'n1', title: 'Local' })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      notes: [],
+    }))
+
+    store.syncFromStorage()
+    vi.advanceTimersByTime(NOTES_PERSIST_DEBOUNCE_MS)
+
+    expect(store.list).toEqual([])
+    expect(readPersisted()?.notes).toEqual([])
+  })
 })

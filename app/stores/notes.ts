@@ -130,6 +130,16 @@ export const useNotesStore = defineStore('notes', () => {
     schedulePersist()
   }
 
+  function syncFromStorage(): void {
+    if (persistTimer !== null) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+
+    persistPending = false
+    notes.value = load().notes
+  }
+
   bindFlushEvents()
 
   onScopeDispose(() => {
@@ -146,5 +156,6 @@ export const useNotesStore = defineStore('notes', () => {
     create,
     update,
     remove,
+    syncFromStorage,
   }
 })
