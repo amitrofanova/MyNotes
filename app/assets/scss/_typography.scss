@@ -1,0 +1,40 @@
+html {
+  font-family: var(--font-body);
+  font-size: 100%;
+  line-height: var(--line-height-body);
+  color: var(--color-text);
+  background-color: var(--color-page);
+  color-scheme: light;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: var(--line-height-heading);
+  letter-spacing: 0;
+  color: var(--color-text);
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+}
+
+h3 {
+  font-size: var(--font-size-lg);
+}
+
+h4 {
+  font-size: var(--font-size-md);
+}
+
+small {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

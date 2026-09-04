@@ -11,6 +11,12 @@ export default defineNuxtConfig({
     '@nuxt/test-utils/module',
   ],
   css: ['~/assets/scss/main.scss'],
+  components: [
+    {
+      path: '~/components',
+      pathPrefix: false,
+    },
+  ],
   nitro: {
     preset: 'static',
   },
