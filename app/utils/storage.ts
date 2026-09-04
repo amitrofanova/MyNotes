@@ -1,7 +1,12 @@
 import type { Note, PersistedState, Todo } from './types'
 
 export const STORAGE_KEY = 'mynotes:data'
+export const DRAFT_KEY_PREFIX = 'mynotes:draft:'
 export const SCHEMA_VERSION = 1
+
+export function draftKey(id: string): string {
+  return `${DRAFT_KEY_PREFIX}${id}`
+}
 
 export function emptyState(): PersistedState {
   return {
@@ -110,5 +115,78 @@ export function save(state: PersistedState): void {
   }
   catch {
     // Quota, private mode, or missing storage must not break the app.
+  }
+}
+
+export function loadDraft(id: string): Note | null {
+  if (id.length === 0) {
+    return null
+  }
+
+  try {
+    const storage = getStorage()
+    if (!storage) {
+      return null
+    }
+
+    const raw = storage.getItem(draftKey(id))
+    if (raw === null || raw === '') {
+      return null
+    }
+
+    const note = normalizeNote(JSON.parse(raw))
+    if (note === null || note.id !== id) {
+      return null
+    }
+
+    return note
+  }
+  catch {
+    return null
+  }
+}
+
+export function saveDraft(note: Note): void {
+  if (note.id.length === 0) {
+    return
+  }
+
+  try {
+    const storage = getStorage()
+    if (!storage) {
+      return
+    }
+
+    const payload: Note = {
+      id: note.id,
+      title: note.title,
+      todos: note.todos.map(todo => ({
+        id: todo.id,
+        text: todo.text,
+        done: todo.done,
+      })),
+    }
+    storage.setItem(draftKey(note.id), JSON.stringify(payload))
+  }
+  catch {
+    // Quota, private mode, or missing storage must not break the app.
+  }
+}
+
+export function removeDraft(id: string): void {
+  if (id.length === 0) {
+    return
+  }
+
+  try {
+    const storage = getStorage()
+    if (!storage) {
+      return
+    }
+
+    storage.removeItem(draftKey(id))
+  }
+  catch {
+    // Private mode or missing storage must not break the app.
   }
 }

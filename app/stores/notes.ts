@@ -88,9 +88,9 @@ export const useNotesStore = defineStore('notes', () => {
     return notes.value.find(note => note.id === id)
   }
 
-  function create(input: Partial<Pick<Note, 'title' | 'todos'>> = {}): Note {
+  function create(input: Partial<Pick<Note, 'id' | 'title' | 'todos'>> = {}): Note {
     const note: Note = {
-      id: crypto.randomUUID(),
+      id: input.id && input.id.length > 0 ? input.id : crypto.randomUUID(),
       title: input.title ?? '',
       todos: cloneTodos(input.todos),
     }
