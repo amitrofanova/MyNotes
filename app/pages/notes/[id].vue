@@ -48,6 +48,7 @@ const { handleKeydown } = useEditorHotkeys({
 })
 
 const titleInputId = useId()
+const titleInput = useTemplateRef<HTMLTextAreaElement>('titleInput')
 const draftOpen = ref(false)
 const cancelOpen = ref(false)
 const deleteOpen = ref(false)
@@ -102,12 +103,39 @@ watch(
   { immediate: true },
 )
 
+const titleFieldWidth = ref(0)
+
+function resizeTitleInput() {
+  const el = titleInput.value
+  if (!el) {
+    return
+  }
+
+  if (typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content')) {
+    el.style.height = ''
+    return
+  }
+
+  el.style.height = '0px'
+  el.style.height = `${el.scrollHeight}px`
+}
+
 function onTitleInput(event: Event) {
   const target = event.target
-  if (target instanceof HTMLInputElement) {
+  if (target instanceof HTMLTextAreaElement) {
     setTitle(target.value)
+    resizeTitleInput()
   }
 }
+
+watch(
+  () => [note.value?.title, titleInput.value, titleFieldWidth.value] as const,
+  async () => {
+    await nextTick()
+    resizeTitleInput()
+  },
+  { flush: 'post', immediate: true },
+)
 
 function onRestoreDraft() {
   restoreDraft()
@@ -210,12 +238,32 @@ function onDocumentKeydown(event: KeyboardEvent) {
   handleKeydown(event)
 }
 
+let titleWidthObserver: ResizeObserver | null = null
+
 onMounted(() => {
   document.addEventListener('keydown', onDocumentKeydown)
   window.addEventListener('storage', onStorage)
 })
 
+watch(titleInput, (el) => {
+  titleWidthObserver?.disconnect()
+  titleWidthObserver = null
+
+  if (!el) {
+    return
+  }
+
+  titleWidthObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect.width ?? 0
+    if (width > 0 && width !== titleFieldWidth.value) {
+      titleFieldWidth.value = width
+    }
+  })
+  titleWidthObserver.observe(el)
+}, { flush: 'post', immediate: true })
+
 onUnmounted(() => {
+  titleWidthObserver?.disconnect()
   document.removeEventListener('keydown', onDocumentKeydown)
   window.removeEventListener('storage', onStorage)
 })
@@ -230,7 +278,7 @@ onUnmounted(() => {
   </main>
   <main
     v-else-if="note"
-    class="note-page"
+    class="note-page note-page--edit"
   >
     <header class="note-page__header">
       <div class="note-page__heading">
@@ -239,30 +287,6 @@ onUnmounted(() => {
           @click="requestLeave"
         >
           К списку
-        </AppButton>
-        <h1 class="note-page__title">
-          Заметка
-        </h1>
-      </div>
-      <div class="note-page__actions">
-        <AppButton
-          variant="primary"
-          :disabled="!canSave"
-          @click="save"
-        >
-          Сохранить
-        </AppButton>
-        <AppButton
-          variant="secondary"
-          @click="requestLeave"
-        >
-          Отменить
-        </AppButton>
-        <AppButton
-          variant="danger"
-          @click="requestDelete"
-        >
-          Удалить
         </AppButton>
       </div>
     </header>
@@ -275,17 +299,18 @@ onUnmounted(() => {
         >
           Название заметки
         </label>
-        <input
+        <textarea
           :id="titleInputId"
+          ref="titleInput"
           class="note-page__title-input"
-          type="text"
+          rows="1"
           :value="note.title"
           placeholder="Название"
           autocomplete="off"
           @input="onTitleInput"
           @blur="commitText"
           @keydown.enter.prevent
-        >
+        />
       </div>
 
       <NoteTodoList
@@ -299,6 +324,34 @@ onUnmounted(() => {
         @uncommitted-add="addFieldUncommitted = $event"
       />
     </div>
+
+    <footer
+      class="note-page__actions"
+      aria-label="Действия с заметкой"
+    >
+      <AppButton
+        class="note-page__action"
+        variant="secondary"
+        @click="requestLeave"
+      >
+        Отменить
+      </AppButton>
+      <AppButton
+        class="note-page__action"
+        variant="danger"
+        @click="requestDelete"
+      >
+        Удалить
+      </AppButton>
+      <AppButton
+        class="note-page__action"
+        variant="primary"
+        :disabled="!canSave"
+        @click="save"
+      >
+        Сохранить
+      </AppButton>
+    </footer>
 
     <AppModal
       v-model="draftOpen"
@@ -371,12 +424,17 @@ onUnmounted(() => {
   margin-inline: auto;
 }
 
+.note-page--edit {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+
+  @media (max-width: 47.9875rem) {
+    width: calc(100% + 2 * var(--space-5));
+    margin-inline: calc(-1 * var(--space-5));
+    padding-inline: var(--space-4);
+  }
+}
+
 .note-page__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
 
@@ -391,23 +449,37 @@ onUnmounted(() => {
 }
 
 .note-page__actions {
+  position: fixed;
+  z-index: 10;
+  inset-inline: 0;
+  bottom: 0;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-wrap: nowrap;
   gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.note-page__action {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 0.5rem;
 }
 
 .note-page__editor {
   display: grid;
   gap: var(--space-5);
-  padding: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  min-width: 0;
 }
 
 .note-page__title-input {
+  display: block;
+  box-sizing: content-box;
   width: 100%;
+  min-width: 0;
+  min-height: calc(var(--font-size-xl) * var(--line-height-heading));
   padding: 0.35rem 0;
   background: transparent;
   border: 0;
@@ -417,11 +489,44 @@ onUnmounted(() => {
   font-size: var(--font-size-xl);
   font-weight: 600;
   line-height: var(--line-height-heading);
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 
   &:focus-visible {
     outline: none;
     border-bottom-color: var(--color-accent);
     box-shadow: 0 2px 0 0 var(--color-accent);
+  }
+}
+
+@media (min-width: 48rem) {
+  .note-page--edit {
+    padding-bottom: 0;
+  }
+
+  .note-page__editor {
+    padding: var(--space-5);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .note-page__actions {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    justify-content: flex-end;
+    margin-top: var(--space-4);
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+
+  .note-page__action {
+    flex: 0 0 auto;
+    padding-inline: 0.75rem;
   }
 }
 </style>

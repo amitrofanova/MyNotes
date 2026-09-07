@@ -203,8 +203,13 @@ function submitNewTodo() {
 
 .note-todos__empty {
   margin: 0;
+  padding: var(--space-4);
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+  text-align: center;
+  background: var(--color-field-bg);
+  border: 1px solid var(--color-field-border);
+  border-radius: var(--radius-sm);
 }
 
 .note-todos__add {
@@ -218,18 +223,20 @@ function submitNewTodo() {
   flex: 0 0 auto;
 }
 
-@media (max-width: 30rem) {
-  .note-todos__text {
-    flex: 1 1 calc(100% - 2rem);
+@media (max-width: 47.9875rem) {
+  .note-todos__item,
+  .note-todos__add {
+    flex-wrap: nowrap;
   }
 
+  .note-todos__text,
   .note-todos__new {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
   }
 
   .note-todos__remove,
   .note-todos__submit {
-    margin-inline-start: auto;
+    flex-shrink: 0;
   }
 }
 </style>

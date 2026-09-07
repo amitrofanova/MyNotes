@@ -166,7 +166,15 @@ const extraCount = computed(() => Math.max(0, props.note.todos.length - PREVIEW_
   text-decoration: line-through;
 }
 
-.note-card__empty-todos,
+.note-card__empty-todos {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  background: var(--color-field-bg);
+  border-radius: var(--radius-sm);
+}
+
 .note-card__more {
   margin: 0;
   color: var(--color-text-muted);
