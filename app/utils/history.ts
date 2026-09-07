@@ -15,6 +15,7 @@ export interface NoteHistory {
   redo: (note: Note) => Note
   commit: () => void
   clear: () => void
+  peekLast: () => HistoryPatch | undefined
 }
 
 function cloneTodo(todo: Todo): Todo {
@@ -180,6 +181,11 @@ export function createHistory(limit = HISTORY_LIMIT): NoteHistory {
     coalescing = false
   }
 
+  function peekLast(): HistoryPatch | undefined {
+    const last = undoStack[undoStack.length - 1]
+    return last === undefined ? undefined : clonePatch(last)
+  }
+
   function push(note: Note, patch: HistoryPatch): Note {
     redoStack.length = 0
 
@@ -224,5 +230,6 @@ export function createHistory(limit = HISTORY_LIMIT): NoteHistory {
     redo,
     commit,
     clear,
+    peekLast,
   }
 }

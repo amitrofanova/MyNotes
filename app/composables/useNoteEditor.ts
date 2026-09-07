@@ -82,6 +82,7 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
 
   let textCommitTimer: ReturnType<typeof setTimeout> | null = null
   let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+  let skipDraftFlush = false
 
   const isDirty = computed(() => {
     if (note.value === null || baseline.value === null) {
@@ -106,7 +107,20 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     }
   }
 
+  function isUnsaved(id: string): boolean {
+    return store.getById(id) === undefined
+  }
+
+  function persistPlaceholderDraft(payload: Note): void {
+    saveDraft(payload)
+    hasDraft.value = false
+  }
+
   function persistDraftNow(): void {
+    if (skipDraftFlush) {
+      return
+    }
+
     clearDraftSaveTimer()
 
     const current = note.value
@@ -116,6 +130,15 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     }
 
     if (notesEqual(current, saved)) {
+      if (hasDraft.value) {
+        return
+      }
+
+      if (isUnsaved(current.id)) {
+        persistPlaceholderDraft(current)
+        return
+      }
+
       removeDraft(current.id)
       hasDraft.value = false
       return
@@ -123,6 +146,36 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
 
     saveDraft(current)
     hasDraft.value = true
+  }
+
+  function handleVisibilityChange(): void {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    if (document.visibilityState === 'hidden') {
+      persistDraftNow()
+    }
+  }
+
+  function bindFlushEvents(): void {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', persistDraftNow)
+    }
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }
+
+  function unbindFlushEvents(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', persistDraftNow)
+    }
+
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }
 
   function scheduleDraftSave(): void {
@@ -164,13 +217,14 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     persistDraftNow()
     clearTextCommitTimer()
     history.clear()
+    skipDraftFlush = false
 
     if (rawId === NEW_NOTE_ID || rawId === '') {
       const created = emptyNote(crypto.randomUUID())
       baseline.value = cloneNote(created)
       note.value = cloneNote(created)
       status.value = 'ready'
-      hasDraft.value = false
+      persistPlaceholderDraft(created)
       return
     }
 
@@ -304,17 +358,28 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
   }
 
   function blurTodo(id: string): void {
-    commitText()
-
     const current = note.value
     if (!isActive() || current === null) {
       return
     }
 
     const todo = current.todos.find(item => item.id === id)
-    if (todo && todo.text.trim().length === 0) {
-      removeTodo(id)
+    if (!todo) {
+      commitText()
+      return
     }
+
+    if (todo.text.trim().length === 0) {
+      clearTextCommitTimer()
+      const last = history.peekLast()
+      if (last?.type === 'setTodoText' && last.id === id) {
+        note.value = history.undo(current)
+      }
+      removeTodo(id)
+      return
+    }
+
+    commitText()
   }
 
   function undo(): void {
@@ -368,6 +433,7 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     baseline.value = cloneNote(payload)
     note.value = payload
     hasDraft.value = false
+    skipDraftFlush = false
   }
 
   function cancel(): void {
@@ -383,6 +449,7 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     removeDraft(current.id)
     note.value = cloneNote(saved)
     hasDraft.value = false
+    skipDraftFlush = true
   }
 
   function restoreDraft(): void {
@@ -413,9 +480,15 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     commitText()
     clearDraftSaveTimer()
     history.clear()
-    removeDraft(current.id)
     note.value = cloneNote(saved)
-    hasDraft.value = false
+    if (isUnsaved(current.id)) {
+      persistPlaceholderDraft(saved)
+    }
+    else {
+      removeDraft(current.id)
+      hasDraft.value = false
+    }
+    skipDraftFlush = false
   }
 
   watch(
@@ -426,9 +499,12 @@ export function useNoteEditor(noteId: MaybeRefOrGetter<string>): NoteEditorSessi
     { immediate: true, flush: 'sync' },
   )
 
+  bindFlushEvents()
+
   onScopeDispose(() => {
     clearTextCommitTimer()
     persistDraftNow()
+    unbindFlushEvents()
   })
 
   return {

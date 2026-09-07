@@ -59,25 +59,54 @@ function normalizeNote(value: unknown): Note | null {
   }
 }
 
+function normalizeNotes(value: unknown): Note[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map(normalizeNote).filter((note): note is Note => note !== null)
+}
+
+function schemaVersionOf(raw: Record<string, unknown>): number {
+  if (typeof raw.schemaVersion !== 'number' || !Number.isFinite(raw.schemaVersion)) {
+    return 0
+  }
+
+  return raw.schemaVersion
+}
+
+function migrateToV1(notes: Note[]): PersistedState {
+  return {
+    schemaVersion: 1,
+    notes,
+  }
+}
+
 export function migrate(raw: unknown): PersistedState {
   if (Array.isArray(raw)) {
-    return {
-      schemaVersion: SCHEMA_VERSION,
-      notes: raw.map(normalizeNote).filter((note): note is Note => note !== null),
-    }
+    return migrateToV1(normalizeNotes(raw))
   }
 
   if (!isRecord(raw)) {
     return emptyState()
   }
 
-  const notes = Array.isArray(raw.notes)
-    ? raw.notes.map(normalizeNote).filter((note): note is Note => note !== null)
-    : []
+  const notes = normalizeNotes(raw.notes)
+  const version = schemaVersionOf(raw)
 
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    notes,
+  switch (version) {
+    case 0:
+      return migrateToV1(notes)
+    case 1:
+      return {
+        schemaVersion: 1,
+        notes,
+      }
+    default:
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        notes,
+      }
   }
 }
 

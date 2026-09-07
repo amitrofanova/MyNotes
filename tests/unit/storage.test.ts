@@ -57,6 +57,38 @@ describe('storage', () => {
     })
   })
 
+  it('migrates schemaVersion 0 payloads to schemaVersion 1', () => {
+    const migrated = migrate({
+      schemaVersion: 0,
+      notes: [sampleNote],
+    })
+    expect(migrated.schemaVersion).toBe(1)
+    expect(migrated.notes).toEqual([sampleNote])
+  })
+
+  it('keeps schemaVersion 1 notes on the v1 branch', () => {
+    const migrated = migrate({
+      schemaVersion: 1,
+      notes: [sampleNote],
+    })
+    expect(migrated).toEqual({
+      schemaVersion: 1,
+      notes: [sampleNote],
+    })
+  })
+
+  it('coerces unknown newer schema versions into the current schema', () => {
+    const migrated = migrate({
+      schemaVersion: 2,
+      notes: [sampleNote],
+      extra: true,
+    })
+    expect(migrated).toEqual({
+      schemaVersion: 1,
+      notes: [sampleNote],
+    })
+  })
+
   it('drops invalid notes and todos while migrating', () => {
     const migrated = migrate({
       schemaVersion: 0,

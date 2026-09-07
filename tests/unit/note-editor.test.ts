@@ -42,9 +42,10 @@ function setupEditor(id: MaybeRefOrGetter<string>): NoteEditorSession & { stop: 
 
 describe('useNoteEditor', () => {
   let stop: () => void = () => {}
+  let browser: ReturnType<typeof installBrowserStubs>
 
   beforeEach(() => {
-    installBrowserStubs()
+    browser = installBrowserStubs()
     setActivePinia(createPinia())
   })
 
@@ -91,6 +92,11 @@ describe('useNoteEditor', () => {
     expect(store.list).toEqual([])
     expect(editor.hasDraft.value).toBe(false)
     expect(editor.isDirty.value).toBe(false)
+    expect(JSON.parse(localStorage.getItem(draftKey('generated-id'))!)).toEqual({
+      id: 'generated-id',
+      title: '',
+      todos: [],
+    })
   })
 
   it('keeps the session when the route id changes from new to the generated uuid', () => {
@@ -105,6 +111,84 @@ describe('useNoteEditor', () => {
     expect(editor.status.value).toBe('ready')
     expect(editor.note.value?.id).toBe('generated-id')
     expect(editor.note.value?.title).toBe('Draft title')
+  })
+
+  it('reopens an empty new-note uuid as ready instead of missing', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('generated-id')
+    const editor = setupEditor(NEW_NOTE_ID)
+    stop = editor.stop
+
+    editor.stop()
+    const reopened = setupEditor('generated-id')
+    stop = reopened.stop
+
+    expect(reopened.status.value).toBe('ready')
+    expect(reopened.note.value).toEqual({
+      id: 'generated-id',
+      title: '',
+      todos: [],
+    })
+    expect(reopened.hasDraft.value).toBe(false)
+    expect(useNotesStore().getById('generated-id')).toBeUndefined()
+  })
+
+  it('flushes a pending draft on pagehide before debounce', () => {
+    vi.useFakeTimers()
+    useNotesStore().create({ id: 'note-1', title: 'Saved', todos: [] })
+    const editor = setupEditor('note-1')
+    stop = editor.stop
+
+    editor.setTitle('Typed')
+    expect(localStorage.getItem(draftKey('note-1'))).toBeNull()
+
+    browser.window.dispatchEvent(new Event('pagehide'))
+
+    expect(JSON.parse(localStorage.getItem(draftKey('note-1'))!)).toEqual({
+      id: 'note-1',
+      title: 'Typed',
+      todos: [],
+    })
+  })
+
+  it('flushes a pending draft when the page becomes hidden', () => {
+    vi.useFakeTimers()
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('generated-id')
+    const editor = setupEditor(NEW_NOTE_ID)
+    stop = editor.stop
+
+    editor.setTitle('Hidden')
+    browser.document.visibilityState = 'hidden'
+    browser.document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(JSON.parse(localStorage.getItem(draftKey('generated-id'))!).title).toBe('Hidden')
+  })
+
+  it('does not overwrite a pending restore draft on pagehide', () => {
+    useNotesStore().create({ id: 'note-1', title: 'Saved', todos: [] })
+    localStorage.setItem(draftKey('note-1'), JSON.stringify(note({ title: 'Unsaved' })))
+    const editor = setupEditor('note-1')
+    stop = editor.stop
+
+    expect(editor.hasDraft.value).toBe(true)
+    browser.window.dispatchEvent(new Event('pagehide'))
+
+    expect(JSON.parse(localStorage.getItem(draftKey('note-1'))!)).toEqual(note({
+      title: 'Unsaved',
+    }))
+  })
+
+  it('does not rewrite a cancelled new-note draft on dispose', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('generated-id')
+    const editor = setupEditor(NEW_NOTE_ID)
+    stop = editor.stop
+
+    editor.setTitle('Leave')
+    editor.cancel()
+
+    expect(localStorage.getItem(draftKey('generated-id'))).toBeNull()
+    editor.stop()
+    stop = () => {}
+    expect(localStorage.getItem(draftKey('generated-id'))).toBeNull()
   })
 
   it('sets missing when the note is gone and does not throw', () => {
@@ -245,7 +329,7 @@ describe('useNoteEditor', () => {
     editor.undo()
     expect(editor.note.value?.todos).toEqual([
       todo('t1', 'Keep'),
-      todo('t2', '   '),
+      todo('t2', 'Drop'),
     ])
   })
 
@@ -345,6 +429,30 @@ describe('useNoteEditor', () => {
     expect(useNotesStore().getById('note-1')?.title).toBe('Saved')
   })
 
+  it('keeps a placeholder draft after discarding an unsaved restore', () => {
+    localStorage.setItem(draftKey('generated-id'), JSON.stringify({
+      id: 'generated-id',
+      title: 'Unsaved',
+      todos: [],
+    }))
+    const editor = setupEditor('generated-id')
+    stop = editor.stop
+
+    editor.discardDraft()
+
+    expect(editor.note.value).toEqual({
+      id: 'generated-id',
+      title: '',
+      todos: [],
+    })
+    expect(editor.hasDraft.value).toBe(false)
+    expect(JSON.parse(localStorage.getItem(draftKey('generated-id'))!)).toEqual({
+      id: 'generated-id',
+      title: '',
+      todos: [],
+    })
+  })
+
   it('discardDraft drops the stored draft and keeps the saved working copy', () => {
     useNotesStore().create({ id: 'note-1', title: 'Saved', todos: [] })
     localStorage.setItem(draftKey('note-1'), JSON.stringify(note({ title: 'Unsaved' })))
@@ -405,6 +513,7 @@ describe('useNoteEditor', () => {
 describe('useEditorHotkeys', () => {
   function keyEvent(overrides: Partial<{
     key: string
+    code: string
     ctrlKey: boolean
     metaKey: boolean
     shiftKey: boolean
@@ -412,6 +521,7 @@ describe('useEditorHotkeys', () => {
   }> = {}) {
     return {
       key: overrides.key ?? 'z',
+      code: overrides.code,
       ctrlKey: overrides.ctrlKey ?? true,
       metaKey: overrides.metaKey ?? false,
       shiftKey: overrides.shiftKey ?? false,
@@ -450,6 +560,20 @@ describe('useEditorHotkeys', () => {
     expect(undo).not.toHaveBeenCalled()
   })
 
+  it('does not intercept native undo in the new-item field when it reports uncommitted text', () => {
+    const undo = vi.fn()
+    const { handleKeydown } = useEditorHotkeys({
+      undo,
+      redo: vi.fn(),
+      hasUncommittedText: () => true,
+    })
+    const event = keyEvent({ tagName: 'INPUT' })
+
+    expect(handleKeydown(event)).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(undo).not.toHaveBeenCalled()
+  })
+
   it('runs app redo on Shift+Ctrl+Z and Meta+Shift+Z', () => {
     const redo = vi.fn()
     const { handleKeydown } = useEditorHotkeys({
@@ -478,7 +602,62 @@ describe('useEditorHotkeys', () => {
       redo: vi.fn(),
       hasUncommittedText: () => false,
     })
-    const event = keyEvent({ key: 'y' })
+    const event = keyEvent({ key: 'y', code: 'KeyY' })
+
+    expect(handleKeydown(event)).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(undo).not.toHaveBeenCalled()
+  })
+
+  it('runs app undo on Ctrl+Я in the Russian layout', () => {
+    const undo = vi.fn()
+    const { handleKeydown } = useEditorHotkeys({
+      undo,
+      redo: vi.fn(),
+      hasUncommittedText: () => false,
+    })
+    const event = keyEvent({ key: 'я', code: 'KeyZ', tagName: 'INPUT' })
+
+    expect(handleKeydown(event)).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(undo).toHaveBeenCalledOnce()
+  })
+
+  it('runs app redo on Shift+Ctrl+Я', () => {
+    const redo = vi.fn()
+    const { handleKeydown } = useEditorHotkeys({
+      undo: vi.fn(),
+      redo,
+      hasUncommittedText: () => false,
+    })
+    const event = keyEvent({ key: 'Я', code: 'KeyZ', shiftKey: true })
+
+    expect(handleKeydown(event)).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(redo).toHaveBeenCalledOnce()
+  })
+
+  it('treats the physical KeyZ as undo when Ctrl changes event.key', () => {
+    const undo = vi.fn()
+    const { handleKeydown } = useEditorHotkeys({
+      undo,
+      redo: vi.fn(),
+      hasUncommittedText: () => false,
+    })
+    const event = keyEvent({ key: 'Control', code: 'KeyZ' })
+
+    expect(handleKeydown(event)).toBe(true)
+    expect(undo).toHaveBeenCalledOnce()
+  })
+
+  it('does not intercept native undo for uncommitted Russian-layout typing', () => {
+    const undo = vi.fn()
+    const { handleKeydown } = useEditorHotkeys({
+      undo,
+      redo: vi.fn(),
+      hasUncommittedText: () => true,
+    })
+    const event = keyEvent({ key: 'я', code: 'KeyZ', tagName: 'INPUT' })
 
     expect(handleKeydown(event)).toBe(false)
     expect(event.preventDefault).not.toHaveBeenCalled()

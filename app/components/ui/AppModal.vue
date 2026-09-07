@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  getFocusableElements,
   handleFocusTrapKeydown,
   lockBodyScroll,
   setAppInert,
@@ -141,7 +142,19 @@ watch(open, async (isOpen) => {
   if (isOpen) {
     activateSession()
     await nextTick()
-    panelRef.value?.focus({ preventScroll: true })
+    const panel = panelRef.value
+    if (!panel) {
+      return
+    }
+
+    const focusable = getFocusableElements(panel)
+    const initial = focusable[0]
+    if (initial) {
+      initial.focus({ preventScroll: true })
+    }
+    else {
+      panel.focus({ preventScroll: true })
+    }
     return
   }
 

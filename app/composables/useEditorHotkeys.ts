@@ -1,5 +1,6 @@
 export interface EditorHotkeyEvent {
   key: string
+  code?: string
   ctrlKey: boolean
   metaKey: boolean
   shiftKey: boolean
@@ -23,10 +24,15 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || element.isContentEditable === true
 }
 
+function isUndoRedoKey(event: EditorHotkeyEvent): boolean {
+  const key = event.key.toLowerCase()
+  return event.code === 'KeyZ' || key === 'z' || key === 'я'
+}
+
 export function useEditorHotkeys(handlers: EditorHotkeyHandlers) {
   function handleKeydown(event: EditorHotkeyEvent): boolean {
     const modifier = event.ctrlKey || event.metaKey
-    if (!modifier || event.key.toLowerCase() !== 'z') {
+    if (!modifier || !isUndoRedoKey(event)) {
       return false
     }
 

@@ -316,6 +316,24 @@ describe('createHistory', () => {
     expect(current.title).toBe('')
   })
 
+  it('peekLast returns a copy of the last undo patch without changing the stack', () => {
+    const history = createHistory()
+    let current = note()
+
+    expect(history.peekLast()).toBeUndefined()
+
+    current = history.push(current, { type: 'setTitle', from: '', to: 'Hi' })
+    const last = history.peekLast()
+    expect(last).toEqual({ type: 'setTitle', from: '', to: 'Hi' })
+
+    if (last?.type === 'setTitle') {
+      last.to = 'Mutated'
+    }
+
+    expect(history.peekLast()).toEqual({ type: 'setTitle', from: '', to: 'Hi' })
+    expect(history.undo(current).title).toBe('')
+  })
+
   it('clear drops undo and redo so later undo/redo do nothing', () => {
     const history = createHistory()
     let current = note()

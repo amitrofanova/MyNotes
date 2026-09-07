@@ -39,10 +39,12 @@ const {
   discardDraft,
 } = useNoteEditor(routeId)
 
+const addFieldUncommitted = ref(false)
+
 const { handleKeydown } = useEditorHotkeys({
   undo,
   redo,
-  hasUncommittedText: () => hasUncommittedText.value,
+  hasUncommittedText: () => hasUncommittedText.value || addFieldUncommitted.value,
 })
 
 const titleInputId = useId()
@@ -294,6 +296,7 @@ onUnmounted(() => {
         @blur="blurTodo"
         @remove="removeTodo"
         @add="addTodo"
+        @uncommitted-add="addFieldUncommitted = $event"
       />
     </div>
 
@@ -302,8 +305,8 @@ onUnmounted(() => {
       title="Восстановить черновик?"
       role="alertdialog"
       :close-on-backdrop="false"
-      :close-on-escape="false"
       :show-close="false"
+      @close="onDiscardDraft"
     >
       <p>Есть несохранённые изменения с прошлого сеанса.</p>
       <template #footer>
@@ -346,8 +349,8 @@ onUnmounted(() => {
       title="Заметка удалена"
       role="alertdialog"
       :close-on-backdrop="false"
-      :close-on-escape="false"
       :show-close="false"
+      @close="acknowledgeRemoteDelete"
     >
       <p>Эту заметку удалили в другой вкладке.</p>
       <template #footer>

@@ -13,6 +13,7 @@ const emit = defineEmits<{
   blur: [id: string]
   remove: [id: string]
   add: [text: string]
+  uncommittedAdd: [value: boolean]
 }>()
 
 const newTodoText = ref('')
@@ -27,6 +28,20 @@ function onTextInput(event: Event, id: string) {
   }
 }
 
+function onNewTodoInput() {
+  emit('uncommittedAdd', true)
+}
+
+function onNewTodoFocus() {
+  if (newTodoText.value.length > 0) {
+    emit('uncommittedAdd', true)
+  }
+}
+
+function onNewTodoBlur() {
+  emit('uncommittedAdd', false)
+}
+
 function submitNewTodo() {
   const text = newTodoText.value.trim()
   if (text.length === 0) {
@@ -35,6 +50,7 @@ function submitNewTodo() {
 
   emit('add', text)
   newTodoText.value = ''
+  emit('uncommittedAdd', false)
 }
 </script>
 
@@ -106,8 +122,12 @@ function submitNewTodo() {
         type="text"
         placeholder="Новый пункт"
         autocomplete="off"
+        @focus="onNewTodoFocus"
+        @input="onNewTodoInput"
+        @blur="onNewTodoBlur"
       >
       <AppButton
+        class="note-todos__submit"
         variant="secondary"
         type="submit"
         :disabled="!canAdd"
@@ -134,6 +154,7 @@ function submitNewTodo() {
 
 .note-todos__item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -156,6 +177,7 @@ function submitNewTodo() {
 
 .note-todos__text,
 .note-todos__new {
+  flex: 1 1 12rem;
   width: 100%;
   min-width: 0;
   padding: 0.5rem 0.75rem;
@@ -187,13 +209,27 @@ function submitNewTodo() {
 
 .note-todos__add {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
 
-.note-todos__new {
-  flex: 1 1 auto;
-  min-width: 0;
+.note-todos__submit {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 30rem) {
+  .note-todos__text {
+    flex: 1 1 calc(100% - 2rem);
+  }
+
+  .note-todos__new {
+    flex: 1 1 100%;
+  }
+
+  .note-todos__remove,
+  .note-todos__submit {
+    margin-inline-start: auto;
+  }
 }
 </style>
