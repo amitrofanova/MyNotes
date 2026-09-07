@@ -40,7 +40,7 @@ Pinia `notes` хранит только сохранённые заметки (C
 
 ## Docker
 
-Статика из `nuxt generate` за nginx. Детали — отдельный слой, не в этом скелете.
+`nuxt generate` кладёт статику в `.output/public`. Образ: Node-сборка → `nginx:alpine`. SPA-fallback — `try_files` на `200.html`, чтобы прямой заход на `/notes/:id` не отдавал 404. `docker compose up` слушает порт 8080.
 
 ## Запрещено
 
